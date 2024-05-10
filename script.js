@@ -1,41 +1,62 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const Redis = require('ioredis');
-
+const RedisCluster = require('redis-clustr');
 
 const app = express();
 app.use(bodyParser.json());
 
-
-const redisNodes = [
-    { host: '127.0.0.1', port: 7000 },
-    { host: '127.0.0.1', port: 7001 },
-    { host: '127.0.0.1', port: 7002 }
+const startupNodes = [
+    {"host": "173.17.0.2", "port": "7000"},
+    {"host": "173.17.0.3", "port": "7001"},
+    {"host": "173.17.0.4", "port": "7002"}
 ];
 
+const client = new RedisCluster(startupNodes, { decode: true });
 
-const client = new Redis.Cluster(redisNodes, { scaleReads: 'all', enableReadyCheck: true });
+app.post('/employes', (req, res) => {
+    const data = req.body;
+    const nom = data.nom;
+    const poste = data.poste;
+    const age = data.age;
 
+    client.incr('employeIdCounter', (err, id_employe) => {
+        if (err) {
+            return res.status(500).json({ message: 'Erreur lors de la génération de l\'identifiant de l\'employé' });
+        }
 
-app.post('/employes', async (req, res) => {
+        const employeKey = `employe:${id_employe}`;
+        client.hmset(employeKey, { nom: nom, poste: poste, age: age });
 
-    const { nom, poste, age } = req.body;
+        const response = {
+            message: 'Nouvel employé ajouté avec succès !',
+            employeId: id_employe
+        };
+        res.status(201).json(response);
+    });
+});
 
+app.post('/utilisateurs', (req, res) => {
+    const data = req.body;
+    const username = data.username;
+    const email = data.email;
 
-    const id_employe = await client.incr('employeIdCounter');
+    client.incr('utilisateurIdCounter', (err, id_utilisateur) => {
+        if (err) {
+            return res.status(500).json({ message: 'Erreur lors de la génération de l\'identifiant de l\'utilisateur' });
+        }
 
-    const employe_key = `employe:${id_employe}`;
-    await client.hmset(employe_key, 'nom', nom, 'poste', poste, 'age', age);
+        const utilisateurKey = `utilisateur:${id_utilisateur}`;
+        client.hmset(utilisateurKey, { username: username, email: email });
 
-
-    res.status(201).json({
-        message: 'Nouvel employé ajouté avec succès !',
-        employeId: id_employe
+        const response = {
+            message: 'Nouvel utilisateur ajouté avec succès !',
+            userId: id_utilisateur
+        };
+        res.status(201).json(response);
     });
 });
 
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Serveur démarré sur le port ${PORT}`);
+app.listen(3000, () => {
+    console.log('Serveur démarré sur le port 3000');
 });
