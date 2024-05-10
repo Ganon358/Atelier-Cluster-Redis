@@ -1,31 +1,41 @@
 const express = require('express');
-const session = require('express-session');
-const RedisStore = require('connect-redis')(session);
-const redisClient = require('redis').createClient();
+const bodyParser = require('body-parser');
+const Redis = require('ioredis');
+
 
 const app = express();
+app.use(bodyParser.json());
 
-const redis = require('redis');
-const client = redis.createClient();
 
-app.use(session({
-    store: new RedisStore({ client: redisClient }),
-    secret: 'your-secret-key',
-    resave: false,
-    saveUninitialized: false,
-}));
+const redisNodes = [
+    { host: '127.0.0.1', port: 7000 },
+    { host: '127.0.0.1', port: 7001 },
+    { host: '127.0.0.1', port: 7002 }
+];
 
-app.get('/data', (req, res) => {
-    
-    client.get('cachedData', (err, data) => {
-        if (data) {
-           
-            res.send(JSON.parse(data));
-        } else {
-           
-            const newData = fetchDataFromDatabase();
-            client.set('cachedData', JSON.stringify(newData));
-            res.send(newData);
-        }
+
+const client = new Redis.Cluster(redisNodes, { scaleReads: 'all', enableReadyCheck: true });
+
+
+app.post('/employes', async (req, res) => {
+
+    const { nom, poste, age } = req.body;
+
+
+    const id_employe = await client.incr('employeIdCounter');
+
+    const employe_key = `employe:${id_employe}`;
+    await client.hmset(employe_key, 'nom', nom, 'poste', poste, 'age', age);
+
+
+    res.status(201).json({
+        message: 'Nouvel employé ajouté avec succès !',
+        employeId: id_employe
     });
+});
+
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Serveur démarré sur le port ${PORT}`);
 });
